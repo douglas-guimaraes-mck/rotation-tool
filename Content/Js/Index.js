@@ -1,14 +1,12 @@
 // Load Page
 function init() {
     var facilitatorsList = [
-        { Name: "Dev 1", Role: "dev" },
-        { Name: "UX 1", Role: "ux" },
-        { Name: "Scrum Master", Role: "sm" },
-        { Name: "Dev 2", Role: "dev" },
-        { Name: "Dev 3", Role: "dev" },
-        { Name: "Tech Lead 1", Role: "tl" },
-        { Name: "Dev 4", Role: "dev" },
-        { Name: "Dev 5", Role: "dev" },
+        { Name: "Alex", Role: "tl" },
+        { Name: "João", Role: "dev" },
+        { Name: "Stephan", Role: "dev" },
+        { Name: "JD", Role: "dev" },
+        { Name: "Zhipeng", Role: "dev" },
+        { Name: "Douglas", Role: "dev" },
     ];
 
     facilitatorsList.sort(SortByName);
