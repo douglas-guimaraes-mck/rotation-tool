@@ -7,6 +7,7 @@ function init() {
         { Name: "JD", Role: "dev" },
         { Name: "Zhipeng", Role: "dev" },
         { Name: "Douglas", Role: "dev" },
+        { Name: "Pavel", Role: "pm" },
     ];
 
     facilitatorsList.sort(SortByName);
