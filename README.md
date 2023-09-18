@@ -6,4 +6,4 @@ You just need to edit the facilitators list inside .js file and it's ready to us
 
 Also, you may access the app using the link below:
 
-https://douglasguimaraes.github.io/rotation-tool/
+https://douglas-guimaraes-mck.github.io/rotation-tool/
