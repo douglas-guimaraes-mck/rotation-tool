@@ -1,33 +1,36 @@
 // Load Page
 function init() {
-    var facilitatorsList = [
-        { Name: "Alex", Role: "tl" },
-        { Name: "João", Role: "dev" },
-        { Name: "Stephan", Role: "dev" },
-        { Name: "JD", Role: "dev" },
-        { Name: "Zhipeng", Role: "dev" },
-        { Name: "Douglas", Role: "dev" },
-        { Name: "Bruno", Role: "dev" },
-        { Name: "Pavel", Role: "pm" },
+    let facilitatorsList = [
+        { Name: "Alex", Role: "tl", Team: "all" },
+        { Name: "Jo&atilde;o", Role: "dev", Team: "beta" },
+        { Name: "Stephan", Role: "dev", Team: "alpha" },
+        { Name: "JD", Role: "dev", Team: "beta" },
+        { Name: "Zhipeng", Role: "dev", Team: "alpha" },
+        { Name: "Douglas", Role: "dev", Team: "alpha" },
+        { Name: "Bruno", Role: "dev", Team: "alpha" },
+        { Name: "Pavel", Role: "pm", Team: "all" },
+        { Name: "Fati", Role: "pm", Team: "beta" },
+        { Name: "Yusheng", Role: "pm", Team: "beta" },
     ];
 
     facilitatorsList.sort(SortByName);
 
-    var facilitatorsDiv = document.getElementById("facilitatorsList");
+    let facilitatorsDiv = document.getElementById("facilitatorsList");
     facilitatorsList.forEach((item, index) => {
 
         //input checkbox
-        var button = document.createElement('button');
+        let button = document.createElement('button');
         $(button).css("width", 100);
         $(button).css("margin-bottom", 20);
         $(button).css("cursor", "pointer");
         $(button).addClass("btn btn-primary");
         $(button).html(item.Name);
         $(button).prop("role", item.Role);
+        $(button).prop("team", item.Team);
         $(button).click(btnFacilitatorButtonClick);
 
         //div
-        var div = document.createElement('div');
+        let div = document.createElement('div');
         $(div).addClass("col col-md-3");
         div.appendChild(button);
 
@@ -35,6 +38,7 @@ function init() {
         facilitatorsDiv.appendChild(div);
 
     });
+    
 }
 
 // Main Functionality: define facilitator based on the configuration
@@ -42,20 +46,20 @@ function init() {
 function getFacilitator() {
     let buttons = getAllButtons();
 
-    var facilitatorsArray = [];
+    let facilitatorsArray = [];
 
     buttons.forEach((item, index) => {
-        var isEnabled = $(item).hasClass("btn-primary");
+        let isEnabled = $(item).hasClass("btn-primary");
         if (isEnabled)
             facilitatorsArray.push($(item).text());
     });
 
     if (facilitatorsArray.length > 0) {
-        var randomNumber = Math.floor(Math.random() * facilitatorsArray.length);
-        var facilitator = facilitatorsArray[randomNumber];
+        let randomNumber = Math.floor(Math.random() * facilitatorsArray.length);
+        let facilitator = facilitatorsArray[randomNumber];
 
-        var title = 'Congratulations, ' + facilitator + '!';
-        var message = 'You are the chosen one!';
+        let title = 'Congratulations, ' + facilitator + '!';
+        let message = 'You are the chosen one!';
 
         Swal.fire({
             title: title,
@@ -80,14 +84,14 @@ function getFacilitator() {
 // Events / Clicks
 
 function btnAll_Click() {
-    var buttons = getAllButtons();
+    let buttons = getAllButtons();
     buttons.forEach((item, index) => {
         enabledButton(item);
     });
 }
 
 function btnOnlyDevs_Click() {
-    var buttons = getAllButtons();
+    let buttons = getAllButtons();
     buttons.forEach((item, index) => {
         var role = $(item).prop("role");
         if (role.toLowerCase() == "dev") {
@@ -101,9 +105,9 @@ function btnOnlyDevs_Click() {
 }
 
 function btnOnlyNonDevs_Click() {
-    var buttons = getAllButtons();
+    let buttons = getAllButtons();
     buttons.forEach((item, index) => {
-        var role = $(item).prop("role");
+        let role = $(item).prop("role");
         if (role.toLowerCase() != "dev") {
             enabledButton(item);
         }
@@ -114,8 +118,36 @@ function btnOnlyNonDevs_Click() {
     });
 }
 
+function btnAlpha_Click() {
+    let buttons = getAllButtons();
+    buttons.forEach((item, index) => {
+        let team = $(item).prop("team");
+        if (team.toLowerCase() != "beta") {
+            enabledButton(item);
+        }
+        else {
+            disabledButton(item);
+        }
+
+    });
+}
+
+function btnBeta_Click() {
+    let buttons = getAllButtons();
+    buttons.forEach((item, index) => {
+        var team = $(item).prop("team");
+        if (team.toLowerCase() != "alpha") {
+            enabledButton(item);
+        }
+        else {
+            disabledButton(item);
+        }
+
+    });
+}
+
 function btnFacilitatorButtonClick() {
-    var isEnabled = $(this).hasClass("btn-primary");
+    let isEnabled = $(this).hasClass("btn-primary");
 
     if (isEnabled) {
         disabledButton(this);
@@ -136,8 +168,8 @@ function btnDefineFacilitator_Click() {
 
 // Sort Array
 function SortByName(a, b) {
-    var aName = a.Name.toLowerCase();
-    var bName = b.Name.toLowerCase();
+    let aName = a.Name.toLowerCase();
+    let bName = b.Name.toLowerCase();
     return ((aName < bName) ? -1 : ((aName > bName) ? 1 : 0));
 }
 
