@@ -9,7 +9,6 @@ function init() {
         { Name: "Douglas", Role: "dev", Team: "alpha" },
         { Name: "Bruno", Role: "dev", Team: "alpha" },
         { Name: "Pavel", Role: "pm", Team: "all" },
-        { Name: "Fati", Role: "pm", Team: "beta" },
         { Name: "Yusheng", Role: "pm", Team: "beta" },
     ];
 
