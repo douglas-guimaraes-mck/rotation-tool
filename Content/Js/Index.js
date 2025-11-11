@@ -2,15 +2,15 @@
 function init() {
     let facilitatorsList = [
         { Name: "Alex", Role: "tl", Team: "all" },
+        { Name: "Stephan", Role: "dev", Team: "all" },
         { Name: "Jo&atilde;o", Role: "dev", Team: "beta" },
-        { Name: "Stephan", Role: "dev", Team: "alpha" },
         { Name: "JD", Role: "dev", Team: "beta" },
+        { Name: "Adam", Role: "pm", Team: "beta" },
         { Name: "Zhipeng", Role: "dev", Team: "alpha" },
         { Name: "Douglas", Role: "dev", Team: "alpha" },
         { Name: "Bruno", Role: "dev", Team: "alpha" },
-        { Name: "Pavel", Role: "pm", Team: "all" },
-        { Name: "Adam", Role: "pm", Team: "all" },
-        { Name: "Luis", Role: "dev", Team: "all" },
+        { Name: "Pavel", Role: "pm", Team: "alpha" },
+        { Name: "Luis", Role: "dev", Team: "alpha" },
     ];
 
     facilitatorsList.sort(SortByName);
@@ -85,14 +85,14 @@ function getFacilitator() {
 
 function btnAll_Click() {
     let buttons = getAllButtons();
-    buttons.forEach((item, index) => {
+    buttons.forEach((item) => {
         enabledButton(item);
     });
 }
 
 function btnOnlyDevs_Click() {
     let buttons = getAllButtons();
-    buttons.forEach((item, index) => {
+    buttons.forEach((item) => {
         var role = $(item).prop("role");
         if (role.toLowerCase() == "dev") {
             enabledButton(item);
@@ -106,7 +106,7 @@ function btnOnlyDevs_Click() {
 
 function btnOnlyNonDevs_Click() {
     let buttons = getAllButtons();
-    buttons.forEach((item, index) => {
+    buttons.forEach((item) => {
         let role = $(item).prop("role");
         if (role.toLowerCase() != "dev") {
             enabledButton(item);
@@ -120,9 +120,9 @@ function btnOnlyNonDevs_Click() {
 
 function btnAlpha_Click() {
     let buttons = getAllButtons();
-    buttons.forEach((item, index) => {
+    buttons.forEach((item) => {
         let team = $(item).prop("team");
-        if (team.toLowerCase() != "beta") {
+        if (team.toLowerCase() == "alpha") {
             enabledButton(item);
         }
         else {
@@ -134,9 +134,9 @@ function btnAlpha_Click() {
 
 function btnBeta_Click() {
     let buttons = getAllButtons();
-    buttons.forEach((item, index) => {
+    buttons.forEach((item) => {
         var team = $(item).prop("team");
-        if (team.toLowerCase() != "alpha") {
+        if (team.toLowerCase() == "beta") {
             enabledButton(item);
         }
         else {
