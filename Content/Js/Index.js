@@ -11,7 +11,7 @@ function init() {
         { Name: "Bruno", Role: "dev", Team: "alpha" },
         { Name: "Pavel", Role: "pm", Team: "alpha" },
         { Name: "Luis", Role: "dev", Team: "alpha" },
-        { Name: "Louren&ccedil;o", Role: "dev", Team: "alpha" },
+        { Name: "Louren&ccedil;o", Role: "dev", Team: "beta" },
     ];
 
     facilitatorsList.sort(SortByName);
