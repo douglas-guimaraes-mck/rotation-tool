@@ -2,6 +2,8 @@
 
 <head>
 
+    <meta charset="UTF-8">
+
     <!-- CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
@@ -54,18 +56,17 @@
 
                 </div>
                 <hr>
-                <div id="historySection" class="alert alert-light border py-2 px-3 mb-3" style="display:none; font-size: 0.85rem;">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div>
-                            <strong>Context:</strong> <span id="historyContextLabel"></span>
-                            &nbsp;&bull;&nbsp;
-                            <strong>Already picked:</strong> <span id="historyList"></span>
+                <div id="statusPanel" class="card mb-3">
+                    <div class="card-body py-2 px-3" style="font-size: 0.85rem;">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span><strong>Context:</strong> <span id="historyContextLabel">&mdash;</span></span>
+                            <span class="text-nowrap">
+                                <button id="clearHistoryBtn" class="btn btn-link btn-sm py-0" onclick="clearCurrentHistory()" style="display:none;">Clear history</button>
+                                <button class="btn btn-link btn-sm py-0" onclick="copyShareLink()">Share link</button>
+                            </span>
                         </div>
-                        <div class="text-nowrap">
-                            <button class="btn btn-link btn-sm py-0" onclick="clearCurrentHistory()">Clear history</button>
-                            &bull;
-                            <button class="btn btn-link btn-sm py-0" onclick="copyShareLink()">Copy shareable link</button>
-                        </div>
+                        <div class="mb-1"><strong>Selected:</strong> <span id="selectedDisplay" class="text-muted">none</span></div>
+                        <div><strong>Already picked:</strong> <span id="historyList" class="text-muted">&mdash;</span></div>
                     </div>
                 </div>
                 <div class="text-end">
