@@ -24,6 +24,9 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
 
     <script src="./Content/Js/Index.js"></script>
+    <style>
+        .active-context { box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.45); }
+    </style>
 </head>
 
 <body onload="init()">
@@ -43,6 +46,7 @@
                 <button id="btnAlpha" onclick="btnAlpha_Click()" class="btn btn-outline-success" style="width: 100px;">&alpha;lpha</button>
                 <button id="btnBeta" onclick="btnBeta_Click()" class="btn btn-outline-success" style="width: 100px;">&beta;eta</button>
                 <button id="btnAll" onclick="btnAll_Click()" class="btn btn-outline-primary" style="width: 100px;">All</button>
+                <button id="btnSupportChampion" onclick="btnSupportChampion_Click()" class="btn btn-outline-warning" style="width: 140px;">Support Champ</button>
                 <!-- <button id="btnOnlyDevs" onclick="btnOnlyDevs_Click()" class="btn btn-outline-dark" style="width: 100px;">Devs</button> -->
                 <!-- <button id="btnOnlyNonDevs" onclick="btnOnlyNonDevs_Click()" class="btn btn-outline-secondary" style="width: 100px;">Non-Devs</button> -->
                 <hr>
@@ -50,6 +54,20 @@
 
                 </div>
                 <hr>
+                <div id="historySection" class="alert alert-light border py-2 px-3 mb-3" style="display:none; font-size: 0.85rem;">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <strong>Context:</strong> <span id="historyContextLabel"></span>
+                            &nbsp;&bull;&nbsp;
+                            <strong>Already picked:</strong> <span id="historyList"></span>
+                        </div>
+                        <div class="text-nowrap">
+                            <button class="btn btn-link btn-sm py-0" onclick="clearCurrentHistory()">Clear history</button>
+                            &bull;
+                            <button class="btn btn-link btn-sm py-0" onclick="copyShareLink()">Copy shareable link</button>
+                        </div>
+                    </div>
+                </div>
                 <div class="text-end">
                     <button id="btnDefineFacilitator" class="btn btn-outline-success" type="button" onclick="btnDefineFacilitator_Click()" style="width: 100px;">
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" id="spinner" style="display: none;"  ></span>
