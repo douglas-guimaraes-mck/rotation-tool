@@ -25,7 +25,7 @@ function loadHistory() {
             return _decodeHistory(hash.slice(6));
         }
     } catch (e) { /* corrupt hash — start fresh */ }
-    return { alpha: [], beta: [], all: [], support: [] };
+    return { alpha: [], beta: [], all: [], supportAlpha: [], supportBeta: [] };
 }
 
 function saveHistory(history) {
@@ -52,36 +52,56 @@ function resetContextHistory(context) {
 }
 
 function updateHistoryDisplay() {
-    var section = document.getElementById('historySection');
     var label = document.getElementById('historyContextLabel');
-    var list = document.getElementById('historyList');
+    var historyList = document.getElementById('historyList');
+    var selectedDisplay = document.getElementById('selectedDisplay');
+    var clearBtn = document.getElementById('clearHistoryBtn');
+
+    var contextLabels = { alpha: 'Alpha', beta: 'Beta', all: 'All', support: 'Support Champion' };
+    label.textContent = currentContext ? (contextLabels[currentContext] || currentContext) : '\u2014';
+
+    var buttons = getAllButtons();
+    var selected = [];
+    buttons.forEach(function (item) {
+        if ($(item).hasClass('btn-primary')) selected.push(escapeHtml($(item).text()));
+    });
+    selectedDisplay.innerHTML = selected.length > 0
+        ? selected.map(function (n) { return '<span class="badge bg-primary me-1">' + n + '</span>'; }).join('')
+        : '<span class="text-muted">none</span>';
 
     if (!currentContext) {
-        section.style.display = 'none';
+        historyList.innerHTML = '<span class="text-muted">&mdash;</span>';
+        if (clearBtn) clearBtn.style.display = 'none';
         return;
     }
 
+    if (clearBtn) clearBtn.style.display = '';
+
     var history = loadHistory();
-    var contextHistory = history[currentContext] || [];
-    var labels = { alpha: 'Alpha', beta: 'Beta', all: 'All', support: 'Support Champion' };
-
-    section.style.display = 'block';
-    label.textContent = labels[currentContext] || currentContext;
-
-    if (contextHistory.length === 0) {
-        list.textContent = 'none yet';
+    if (currentContext === 'support') {
+        var aH = history.supportAlpha || [];
+        var bH = history.supportBeta || [];
+        historyList.innerHTML =
+            '<span class="text-muted me-1">Alpha:</span>'
+            + (aH.length > 0 ? aH.map(function (n) { return '<span class="badge bg-secondary me-1">' + escapeHtml(n) + '</span>'; }).join('') : '<span class="text-muted me-2">none yet</span>')
+            + ' <span class="text-muted me-1">Beta:</span>'
+            + (bH.length > 0 ? bH.map(function (n) { return '<span class="badge bg-secondary me-1">' + escapeHtml(n) + '</span>'; }).join('') : '<span class="text-muted">none yet</span>');
     } else {
-        list.innerHTML = contextHistory.map(function (name) {
-            return '<span class="badge bg-secondary me-1">'
-                + name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                + '</span>';
-        }).join('');
+        var contextHistory = history[currentContext] || [];
+        historyList.innerHTML = contextHistory.length > 0
+            ? contextHistory.map(function (n) { return '<span class="badge bg-secondary me-1">' + escapeHtml(n) + '</span>'; }).join('')
+            : '<span class="text-muted">none yet</span>';
     }
 }
 
 function clearCurrentHistory() {
     if (!currentContext) return;
-    resetContextHistory(currentContext);
+    if (currentContext === 'support') {
+        resetContextHistory('supportAlpha');
+        resetContextHistory('supportBeta');
+    } else {
+        resetContextHistory(currentContext);
+    }
     updateHistoryDisplay();
 }
 
@@ -99,6 +119,10 @@ function copyShareLink() {
         document.body.removeChild(input);
         Swal.fire(msg);
     }
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ─── Load Page ───────────────────────────────────────────────────────────────
@@ -146,9 +170,111 @@ function init() {
     updateHistoryDisplay();
 }
 
+function getSupportChampions() {
+    var buttons = getAllButtons();
+    var allAlphaDevs = [];
+    var allBetaDevs  = [];
+    var alphaPool    = [];
+    var betaPool     = [];
+
+    buttons.forEach(function (item) {
+        var role = $(item).prop('role');
+        var team = $(item).prop('team');
+        var name = $(item).text();
+        if (role && role.toLowerCase() === 'dev') {
+            if (team && team.toLowerCase() === 'alpha') {
+                allAlphaDevs.push(name);
+                if ($(item).hasClass('btn-primary')) alphaPool.push(name);
+            } else if (team && team.toLowerCase() === 'beta') {
+                allBetaDevs.push(name);
+                if ($(item).hasClass('btn-primary')) betaPool.push(name);
+            }
+        }
+    });
+
+    if (allAlphaDevs.length === 0 && allBetaDevs.length === 0) {
+        unloadSpinner();
+        Swal.fire("It's cold here... :(", "Is anyone there?", 'question');
+        return;
+    }
+
+    var alphaReset = false, betaReset = false;
+
+    // When the enabled pool for a squad is empty but the squad has devs,
+    // the cycle is exhausted — fall back to the full squad list and start fresh.
+    if (alphaPool.length === 0 && allAlphaDevs.length > 0) {
+        alphaReset = true;
+        resetContextHistory('supportAlpha');
+        alphaPool = allAlphaDevs.slice();
+    }
+    if (betaPool.length === 0 && allBetaDevs.length > 0) {
+        betaReset = true;
+        resetContextHistory('supportBeta');
+        betaPool = allBetaDevs.slice();
+    }
+
+    // Re-read history after potential resets above
+    var history = loadHistory();
+
+    var eligibleAlpha = alphaPool.filter(function (n) { return (history.supportAlpha || []).indexOf(n) === -1; });
+    var eligibleBeta  = betaPool.filter(function (n)  { return (history.supportBeta  || []).indexOf(n) === -1; });
+
+    // Secondary reset: pool has members but all are already in history
+    if (!alphaReset && eligibleAlpha.length === 0 && alphaPool.length > 0) {
+        alphaReset = true;
+        resetContextHistory('supportAlpha');
+        eligibleAlpha = alphaPool.slice();
+    }
+    if (!betaReset && eligibleBeta.length === 0 && betaPool.length > 0) {
+        betaReset = true;
+        resetContextHistory('supportBeta');
+        eligibleBeta = betaPool.slice();
+    }
+
+    var resultParts = [];
+    var resetNotes  = [];
+
+    if (eligibleAlpha.length > 0) {
+        var alphaChamp = eligibleAlpha[Math.floor(Math.random() * eligibleAlpha.length)];
+        addToHistory('supportAlpha', alphaChamp);
+        disableButtonByName(alphaChamp);
+        resultParts.push('<b>Alpha:</b> ' + escapeHtml(alphaChamp));
+        if (alphaReset) resetNotes.push('Alpha cycle was reset.');
+    }
+
+    if (eligibleBeta.length > 0) {
+        var betaChamp = eligibleBeta[Math.floor(Math.random() * eligibleBeta.length)];
+        addToHistory('supportBeta', betaChamp);
+        disableButtonByName(betaChamp);
+        resultParts.push('<b>Beta:</b> ' + escapeHtml(betaChamp));
+        if (betaReset) resetNotes.push('Beta cycle was reset.');
+    }
+
+    if (resultParts.length === 0) {
+        unloadSpinner();
+        Swal.fire("It's cold here... :(", "Is anyone there?", 'question');
+        return;
+    }
+
+    refreshContext();
+
+    var message = resultParts.join('<br>');
+    if (resetNotes.length > 0) {
+        message += '<br><br><small class="text-muted">' + resetNotes.join(' ') + '</small>';
+    }
+
+    Swal.fire({ title: 'Support Champions!', html: message, icon: 'success', confirmButtonText: 'Cool!' });
+    unloadSpinner();
+}
+
 // Main Functionality: define facilitator based on the configuration
 // Called in the btnDefineFacilitator click event
 function getFacilitator() {
+    if (currentContext === 'support') {
+        getSupportChampions();
+        return;
+    }
+
     let buttons = getAllButtons();
     let facilitatorsArray = [];
 
@@ -182,13 +308,11 @@ function getFacilitator() {
     var facilitator = eligible[randomIndex];
 
     addToHistory(currentContext, facilitator);
-    updateHistoryDisplay();
+    disableButtonByName(facilitator);
+    refreshContext();
 
-    var isSupport = currentContext === 'support';
     var title = 'Congratulations, ' + facilitator + '!';
-    var message = isSupport
-        ? 'You are the <b>Support Champion</b> this week!'
-        : 'You are the chosen one!';
+    var message = 'You are the chosen one!';
 
     if (cycleReset && currentContext) {
         message += '<br><br><small class="text-muted">Everyone in the pool had been picked — history was reset for a new cycle.</small>';
@@ -200,6 +324,14 @@ function getFacilitator() {
 
 // Events / Clicks
 
+function refreshContext() {
+    if (currentContext === 'alpha')        btnAlpha_Click();
+    else if (currentContext === 'beta')   btnBeta_Click();
+    else if (currentContext === 'all')    btnAll_Click();
+    else if (currentContext === 'support') btnSupportChampion_Click();
+    else updateHistoryDisplay();
+}
+
 function setActiveContext(context, buttonId) {
     currentContext = context;
     ['btnAlpha', 'btnBeta', 'btnAll', 'btnSupportChampion'].forEach(function (id) {
@@ -210,28 +342,43 @@ function setActiveContext(context, buttonId) {
         var active = document.getElementById(buttonId);
         if (active) active.classList.add('active-context');
     }
-    updateHistoryDisplay();
 }
 
 function btnAll_Click() {
     setActiveContext('all', 'btnAll');
+    var alreadyPicked = loadHistory().all || [];
     let buttons = getAllButtons();
     buttons.forEach((item) => {
-        enabledButton(item);
-    });
-}
-
-function btnSupportChampion_Click() {
-    setActiveContext('support', 'btnSupportChampion');
-    let buttons = getAllButtons();
-    buttons.forEach((item) => {
-        var role = $(item).prop("role");
-        if (role.toLowerCase() === "dev") {
+        if (alreadyPicked.indexOf($(item).text()) === -1) {
             enabledButton(item);
         } else {
             disabledButton(item);
         }
     });
+    updateHistoryDisplay();
+}
+
+function btnSupportChampion_Click() {
+    setActiveContext('support', 'btnSupportChampion');
+    var history = loadHistory();
+    var alphaHistory = history.supportAlpha || [];
+    var betaHistory  = history.supportBeta  || [];
+    let buttons = getAllButtons();
+    buttons.forEach((item) => {
+        var role = $(item).prop("role");
+        if (role.toLowerCase() === "dev") {
+            var team = $(item).prop("team");
+            var picked = (team && team.toLowerCase() === 'alpha') ? alphaHistory : betaHistory;
+            if (picked.indexOf($(item).text()) === -1) {
+                enabledButton(item);
+            } else {
+                disabledButton(item);
+            }
+        } else {
+            disabledButton(item);
+        }
+    });
+    updateHistoryDisplay();
 }
 
 function btnOnlyDevs_Click() {
@@ -264,32 +411,40 @@ function btnOnlyNonDevs_Click() {
 
 function btnAlpha_Click() {
     setActiveContext('alpha', 'btnAlpha');
+    var alreadyPicked = loadHistory().alpha || [];
     let buttons = getAllButtons();
     buttons.forEach((item) => {
         let team = $(item).prop("team");
         if (team.toLowerCase() == "alpha") {
-            enabledButton(item);
-        }
-        else {
+            if (alreadyPicked.indexOf($(item).text()) === -1) {
+                enabledButton(item);
+            } else {
+                disabledButton(item);
+            }
+        } else {
             disabledButton(item);
         }
-
     });
+    updateHistoryDisplay();
 }
 
 function btnBeta_Click() {
     setActiveContext('beta', 'btnBeta');
+    var alreadyPicked = loadHistory().beta || [];
     let buttons = getAllButtons();
     buttons.forEach((item) => {
         var team = $(item).prop("team");
         if (team.toLowerCase() == "beta") {
-            enabledButton(item);
-        }
-        else {
+            if (alreadyPicked.indexOf($(item).text()) === -1) {
+                enabledButton(item);
+            } else {
+                disabledButton(item);
+            }
+        } else {
             disabledButton(item);
         }
-
     });
+    updateHistoryDisplay();
 }
 
 function btnFacilitatorButtonClick() {
@@ -301,6 +456,7 @@ function btnFacilitatorButtonClick() {
     else {
         enabledButton(this);
     }
+    updateHistoryDisplay();
 }
 
 function btnDefineFacilitator_Click() {
@@ -348,6 +504,12 @@ function disabledButton(button) {
     $(button).removeClass("btn-primary");
     $(button).addClass("btn-default");
     $(button).css("cursor", "not-allowed");
+}
+
+function disableButtonByName(name) {
+    getAllButtons().forEach(function (item) {
+        if ($(item).text() === name) disabledButton(item);
+    });
 }
 
 
