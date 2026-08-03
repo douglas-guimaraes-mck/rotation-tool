@@ -139,6 +139,7 @@ function init() {
         { Name: "Pavel", Role: "pm", Team: "alpha" },
         { Name: "Luis", Role: "dev", Team: "alpha" },
         { Name: "Louren&ccedil;o", Role: "dev", Team: "beta" },
+        { Name: "Vencel", Role: "pm", Team: "alpha" },
     ];
 
     facilitatorsList.sort(SortByName);
@@ -181,7 +182,7 @@ function getSupportChampions() {
         var role = $(item).prop('role');
         var team = $(item).prop('team');
         var name = $(item).text();
-        if (role && role.toLowerCase() === 'dev') {
+        if (role && (role.toLowerCase() === 'dev' || role.toLowerCase() === 'pm')) {
             if (team && team.toLowerCase() === 'alpha') {
                 allAlphaDevs.push(name);
                 if ($(item).hasClass('btn-primary')) alphaPool.push(name);
