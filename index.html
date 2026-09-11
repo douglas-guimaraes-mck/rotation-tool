@@ -66,10 +66,26 @@
                             </span>
                         </div>
                         <div class="mb-1"><strong>Selected:</strong> <span id="selectedDisplay" class="text-muted">none</span></div>
-                        <div><strong>Already picked:</strong> <span id="historyList" class="text-muted">&mdash;</span></div>
+                        <div><strong id="historyLabel">Already picked:</strong> <span id="historyList" class="text-muted">&mdash;</span></div>
                     </div>
                 </div>
-                <div class="text-end">
+                <div id="manualChampPanel" style="display:none;" class="mb-3">
+                    <div class="row g-2">
+                        <div class="col">
+                            <label for="selManualPrimary" class="form-label mb-1" style="font-size: 0.8rem;">Primary (manual)</label>
+                            <select id="selManualPrimary" class="form-select form-select-sm">
+                                <option value="">Auto</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="selManualSecondary" class="form-label mb-1" style="font-size: 0.8rem;">Secondary (manual)</label>
+                            <select id="selManualSecondary" class="form-select form-select-sm">
+                                <option value="">Auto</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end mb-4">
                     <button id="btnDefineFacilitator" class="btn btn-outline-success" type="button" onclick="btnDefineFacilitator_Click()" style="width: 100px;">
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" id="spinner" style="display: none;"  ></span>
                         Define
