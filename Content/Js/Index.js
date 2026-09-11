@@ -25,7 +25,7 @@ function loadHistory() {
             return _decodeHistory(hash.slice(6));
         }
     } catch (e) { /* corrupt hash — start fresh */ }
-    return { alpha: [], beta: [], all: [], supportAlpha: [], supportBeta: [] };
+    return { alpha: [], beta: [], all: [], supportQueuePrimary: [], supportQueueSecondary: [], supportSkip: [], supportRounds: [] };
 }
 
 function saveHistory(history) {
@@ -60,6 +60,9 @@ function updateHistoryDisplay() {
     var contextLabels = { alpha: 'Alpha', beta: 'Beta', all: 'All', support: 'Support Champion' };
     label.textContent = currentContext ? (contextLabels[currentContext] || currentContext) : '\u2014';
 
+    var historyLabel = document.getElementById('historyLabel');
+    if (historyLabel) historyLabel.textContent = (currentContext === 'support') ? 'History:' : 'Already picked:';
+
     var buttons = getAllButtons();
     var selected = [];
     buttons.forEach(function (item) {
@@ -70,6 +73,7 @@ function updateHistoryDisplay() {
         : '<span class="text-muted">none</span>';
 
     if (!currentContext) {
+        historyList.style.display = '';
         historyList.innerHTML = '<span class="text-muted">&mdash;</span>';
         if (clearBtn) clearBtn.style.display = 'none';
         return;
@@ -79,14 +83,45 @@ function updateHistoryDisplay() {
 
     var history = loadHistory();
     if (currentContext === 'support') {
-        var aH = history.supportAlpha || [];
-        var bH = history.supportBeta || [];
-        historyList.innerHTML =
-            '<span class="text-muted me-1">Alpha:</span>'
-            + (aH.length > 0 ? aH.map(function (n) { return '<span class="badge bg-secondary me-1">' + escapeHtml(n) + '</span>'; }).join('') : '<span class="text-muted me-2">none yet</span>')
-            + ' <span class="text-muted me-1">Beta:</span>'
-            + (bH.length > 0 ? bH.map(function (n) { return '<span class="badge bg-secondary me-1">' + escapeHtml(n) + '</span>'; }).join('') : '<span class="text-muted">none yet</span>');
+        historyList.style.display = 'block';
+        var rounds = history.supportRounds || [];
+        var squadLabel = function (sq) { return sq === 'alpha' ? 'Alpha' : (sq === 'beta' ? 'Beta' : ''); };
+        var fmtDate = function (iso) {
+            var parts = String(iso || '').split('-');
+            if (parts.length !== 3) return '';
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            var m = parseInt(parts[1], 10), d = parseInt(parts[2], 10);
+            if (!m || !d) return '';
+            return d + ' ' + months[m - 1];
+        };
+        var cell = function (x) {
+            if (!x) return '<span class="text-muted">&mdash;</span>';
+            var sq = squadLabel(x.squad);
+            return escapeHtml(x.name) + (sq ? ' <span class="text-muted">(' + sq + ')</span>' : '');
+        };
+        if (rounds.length === 0) {
+            historyList.innerHTML = '<span class="text-muted">none yet</span>';
+        } else {
+            var rowsHtml = '';
+            for (var ri = rounds.length - 1; ri >= 0; ri--) {
+                var rd = rounds[ri];
+                var when = fmtDate(rd.date) || String(ri + 1);
+                rowsHtml += '<tr>'
+                    + '<td class="text-muted" style="white-space:nowrap;">' + escapeHtml(when) + '</td>'
+                    + '<td>' + cell(rd.primary) + '</td>'
+                    + '<td>' + cell(rd.secondary) + '</td>'
+                    + '</tr>';
+            }
+            historyList.innerHTML =
+                '<table class="table table-sm table-borderless mb-0 mt-1 align-middle" style="font-size:0.8rem;">'
+                + '<thead><tr>'
+                + '<th class="fw-normal text-muted" style="white-space:nowrap;">Date</th>'
+                + '<th class="fw-semibold">Primary</th>'
+                + '<th class="fw-semibold">Secondary</th>'
+                + '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+        }
     } else {
+        historyList.style.display = '';
         var contextHistory = history[currentContext] || [];
         historyList.innerHTML = contextHistory.length > 0
             ? contextHistory.map(function (n) { return '<span class="badge bg-secondary me-1">' + escapeHtml(n) + '</span>'; }).join('')
@@ -97,8 +132,12 @@ function updateHistoryDisplay() {
 function clearCurrentHistory() {
     if (!currentContext) return;
     if (currentContext === 'support') {
-        resetContextHistory('supportAlpha');
-        resetContextHistory('supportBeta');
+        var h = loadHistory();
+        h.supportQueuePrimary = [];
+        h.supportQueueSecondary = [];
+        h.supportSkip = [];
+        h.supportRounds = [];
+        saveHistory(h);
     } else {
         resetContextHistory(currentContext);
     }
@@ -171,100 +210,213 @@ function init() {
     updateHistoryDisplay();
 }
 
-function getSupportChampions() {
-    var buttons = getAllButtons();
-    var allAlphaDevs = [];
-    var allBetaDevs  = [];
-    var alphaPool    = [];
-    var betaPool     = [];
+// Squad ('alpha'|'beta'|null) of a member by display name (display label only).
+function _supportSquadOf(name) {
+    var squad = null;
+    getAllButtons().forEach(function (item) {
+        if ($(item).text() === name) {
+            var t = ($(item).prop('team') || '').toLowerCase();
+            if (t === 'alpha' || t === 'beta') squad = t;
+        }
+    });
+    return squad;
+}
 
-    buttons.forEach(function (item) {
-        var role = $(item).prop('role');
-        var team = $(item).prop('team');
-        var name = $(item).text();
-        if (role && (role.toLowerCase() === 'dev' || role.toLowerCase() === 'pm')) {
-            if (team && team.toLowerCase() === 'alpha') {
-                allAlphaDevs.push(name);
-                if ($(item).hasClass('btn-primary')) alphaPool.push(name);
-            } else if (team && team.toLowerCase() === 'beta') {
-                allBetaDevs.push(name);
-                if ($(item).hasClass('btn-primary')) betaPool.push(name);
-            }
+// All eligible Support Champ members (devs + pms, any squad). TLs excluded.
+function _supportEligible() {
+    var names = [];
+    getAllButtons().forEach(function (item) {
+        var r = ($(item).prop('role') || '').toLowerCase();
+        var t = ($(item).prop('team') || '').toLowerCase();
+        if ((r === 'dev' || r === 'pm') && (t === 'alpha' || t === 'beta')) names.push($(item).text());
+    });
+    return names;
+}
+
+// Eligible members whose button is currently enabled (selected).
+function _supportEnabledSet() {
+    var set = {};
+    getAllButtons().forEach(function (item) {
+        var r = ($(item).prop('role') || '').toLowerCase();
+        var t = ($(item).prop('team') || '').toLowerCase();
+        if ((r === 'dev' || r === 'pm') && (t === 'alpha' || t === 'beta') && $(item).hasClass('btn-primary')) {
+            set[$(item).text()] = true;
+        }
+    });
+    return set;
+}
+
+// (Re)build the manual Primary/Secondary dropdowns from the eligible dev/pm pool.
+// Lists ALL eligible members regardless of queue position (manual can override).
+function populateManualChampSelects() {
+    var selP = document.getElementById('selManualPrimary');
+    var selS = document.getElementById('selManualSecondary');
+    if (!selP || !selS) return;
+    var prevP = selP.value, prevS = selS.value;
+
+    var members = [];
+    getAllButtons().forEach(function (item) {
+        var r = ($(item).prop('role') || '').toLowerCase();
+        var t = ($(item).prop('team') || '').toLowerCase();
+        if ((r === 'dev' || r === 'pm') && (t === 'alpha' || t === 'beta')) {
+            members.push({ name: $(item).text(), squad: t });
         }
     });
 
-    if (allAlphaDevs.length === 0 && allBetaDevs.length === 0) {
+    var optsHtml = '<option value="">Auto</option>' + members.map(function (m) {
+        var label = escapeHtml(m.name) + ' (' + (m.squad === 'alpha' ? 'Alpha' : 'Beta') + ')';
+        return '<option value="' + escapeHtml(m.name) + '">' + label + '</option>';
+    }).join('');
+
+    selP.innerHTML = optsHtml;
+    selS.innerHTML = optsHtml;
+    selP.value = prevP; if (selP.value !== prevP) selP.value = '';
+    selS.value = prevS; if (selS.value !== prevS) selS.value = '';
+}
+
+// Keep the two rotation queues in sync with the current roster: drop members who
+// are no longer eligible, de-duplicate, and enqueue any new members onto the shorter
+// queue (so the Primary/Secondary sides stay balanced). Persists + returns them.
+function _ensureSupportQueues() {
+    var eligible = _supportEligible();
+    var elig = {};
+    eligible.forEach(function (n) { elig[n] = true; });
+
+    var h = loadHistory();
+    var qp = (h.supportQueuePrimary || []).filter(function (n) { return elig[n]; });
+    var qs = (h.supportQueueSecondary || []).filter(function (n) { return elig[n]; });
+
+    // De-duplicate within and across the two queues.
+    var seen = {};
+    qp = qp.filter(function (n) { if (seen[n]) return false; seen[n] = true; return true; });
+    qs = qs.filter(function (n) { if (seen[n]) return false; seen[n] = true; return true; });
+
+    // New members join the shorter queue (ties -> Primary side).
+    eligible.forEach(function (n) {
+        if (seen[n]) return;
+        if (qp.length <= qs.length) qp.push(n); else qs.push(n);
+        seen[n] = true;
+    });
+
+    h.supportQueuePrimary = qp;
+    h.supportQueueSecondary = qs;
+    saveHistory(h);
+    return { qp: qp, qs: qs };
+}
+
+// Remove and return the first enabled, non-excluded name from `queue`; else null.
+function _takeFromQueue(queue, enabledSet, exclude) {
+    for (var i = 0; i < queue.length; i++) {
+        var n = queue[i];
+        if (enabledSet[n] && exclude.indexOf(n) === -1) {
+            queue.splice(i, 1);
+            return n;
+        }
+    }
+    return null;
+}
+
+function getSupportChampions() {
+    var eligible = _supportEligible();
+    if (eligible.length === 0) {
         unloadSpinner();
         Swal.fire("It's cold here... :(", "Is anyone there?", 'question');
         return;
     }
 
-    var alphaReset = false, betaReset = false;
-
-    // When the enabled pool for a squad is empty but the squad has devs,
-    // the cycle is exhausted — fall back to the full squad list and start fresh.
-    if (alphaPool.length === 0 && allAlphaDevs.length > 0) {
-        alphaReset = true;
-        resetContextHistory('supportAlpha');
-        alphaPool = allAlphaDevs.slice();
-    }
-    if (betaPool.length === 0 && allBetaDevs.length > 0) {
-        betaReset = true;
-        resetContextHistory('supportBeta');
-        betaPool = allBetaDevs.slice();
+    // Optional manual overrides ('' = Auto).
+    var manualPrimary   = (document.getElementById('selManualPrimary')   || {}).value || '';
+    var manualSecondary = (document.getElementById('selManualSecondary') || {}).value || '';
+    if (manualPrimary && manualSecondary && manualPrimary === manualSecondary) {
+        unloadSpinner();
+        Swal.fire('Hold on!', 'The same person cannot be both Primary and Secondary.', 'warning');
+        return;
     }
 
-    // Re-read history after potential resets above
-    var history = loadHistory();
+    // Sync queues with the roster, then work on local copies.
+    var queues = _ensureSupportQueues();
+    var qp = queues.qp.slice();
+    var qs = queues.qs.slice();
 
-    var eligibleAlpha = alphaPool.filter(function (n) { return (history.supportAlpha || []).indexOf(n) === -1; });
-    var eligibleBeta  = betaPool.filter(function (n)  { return (history.supportBeta  || []).indexOf(n) === -1; });
+    var enabled = _supportEnabledSet();
+    // Manual picks are always allowed even if their button is deselected.
+    if (manualPrimary) enabled[manualPrimary] = true;
+    if (manualSecondary) enabled[manualSecondary] = true;
 
-    // Secondary reset: pool has members but all are already in history
-    if (!alphaReset && eligibleAlpha.length === 0 && alphaPool.length > 0) {
-        alphaReset = true;
-        resetContextHistory('supportAlpha');
-        eligibleAlpha = alphaPool.slice();
+    var removeFrom = function (arr, x) { var i = arr.indexOf(x); if (i !== -1) arr.splice(i, 1); };
+
+    var primaryName = null, secondaryName = null;
+
+    if (manualPrimary) { primaryName = manualPrimary; removeFrom(qp, primaryName); removeFrom(qs, primaryName); }
+    if (manualSecondary) { secondaryName = manualSecondary; removeFrom(qp, secondaryName); removeFrom(qs, secondaryName); }
+
+    // Fill remaining slot(s) from the queues (Primary from due-Primary, Secondary
+    // from due-Secondary), falling back to the other queue only if one runs dry.
+    if (!primaryName) {
+        primaryName = _takeFromQueue(qp, enabled, secondaryName ? [secondaryName] : []);
+        if (!primaryName) primaryName = _takeFromQueue(qs, enabled, secondaryName ? [secondaryName] : []);
     }
-    if (!betaReset && eligibleBeta.length === 0 && betaPool.length > 0) {
-        betaReset = true;
-        resetContextHistory('supportBeta');
-        eligibleBeta = betaPool.slice();
-    }
-
-    var resultParts = [];
-    var resetNotes  = [];
-
-    if (eligibleAlpha.length > 0) {
-        var alphaChamp = eligibleAlpha[Math.floor(Math.random() * eligibleAlpha.length)];
-        addToHistory('supportAlpha', alphaChamp);
-        disableButtonByName(alphaChamp);
-        resultParts.push('<b>Alpha:</b> ' + escapeHtml(alphaChamp));
-        if (alphaReset) resetNotes.push('Alpha cycle was reset.');
-    }
-
-    if (eligibleBeta.length > 0) {
-        var betaChamp = eligibleBeta[Math.floor(Math.random() * eligibleBeta.length)];
-        addToHistory('supportBeta', betaChamp);
-        disableButtonByName(betaChamp);
-        resultParts.push('<b>Beta:</b> ' + escapeHtml(betaChamp));
-        if (betaReset) resetNotes.push('Beta cycle was reset.');
+    if (!secondaryName) {
+        secondaryName = _takeFromQueue(qs, enabled, primaryName ? [primaryName] : []);
+        if (!secondaryName) secondaryName = _takeFromQueue(qp, enabled, primaryName ? [primaryName] : []);
     }
 
-    if (resultParts.length === 0) {
+    if (!primaryName && !secondaryName) {
         unloadSpinner();
         Swal.fire("It's cold here... :(", "Is anyone there?", 'question');
         return;
     }
+
+    // Build champs; a lone champ (only one available) is shown as Primary.
+    var champs = [];
+    if (primaryName)   champs.push({ name: primaryName,   squad: _supportSquadOf(primaryName),   role: 'primary'   });
+    if (secondaryName) champs.push({ name: secondaryName, squad: _supportSquadOf(secondaryName), role: 'secondary' });
+    if (champs.length === 1) champs[0].role = 'primary';
+
+    // Re-queue each served champ to the BACK of the opposite queue (strict alternation).
+    champs.forEach(function (ch) {
+        removeFrom(qp, ch.name); removeFrom(qs, ch.name);
+        if (ch.role === 'primary') qs.push(ch.name); else qp.push(ch.name);
+    });
+
+    // Record the round with today's date.
+    var today = new Date();
+    var dateStr = today.getFullYear() + '-'
+        + String(today.getMonth() + 1).padStart(2, '0') + '-'
+        + String(today.getDate()).padStart(2, '0');
+    var roundPrimary = null, roundSecondary = null;
+    champs.forEach(function (ch) {
+        if (ch.role === 'primary') roundPrimary = { name: ch.name, squad: ch.squad };
+        else roundSecondary = { name: ch.name, squad: ch.squad };
+    });
+
+    var latest = loadHistory();
+    latest.supportQueuePrimary = qp;
+    latest.supportQueueSecondary = qs;
+    latest.supportRounds = latest.supportRounds || [];
+    latest.supportRounds.push({ date: dateStr, primary: roundPrimary, secondary: roundSecondary });
+    saveHistory(latest);
+
+    // Reset the manual dropdowns back to Auto for the next rotation.
+    var selP = document.getElementById('selManualPrimary');
+    var selS = document.getElementById('selManualSecondary');
+    if (selP) selP.value = '';
+    if (selS) selS.value = '';
 
     refreshContext();
 
-    var message = resultParts.join('<br>');
-    if (resetNotes.length > 0) {
-        message += '<br><br><small class="text-muted">' + resetNotes.join(' ') + '</small>';
-    }
+    // Popup: Primary first, then Secondary.
+    var champsSorted = champs.slice().sort(function (a, b) {
+        if (a.role === b.role) return 0;
+        return a.role === 'primary' ? -1 : 1;
+    });
+    var resultParts = champsSorted.map(function (ch) {
+        var label = ch.role === 'primary' ? 'Primary' : 'Secondary';
+        var squadLabel = ch.squad === 'alpha' ? 'Alpha' : (ch.squad === 'beta' ? 'Beta' : '');
+        return '<b>' + label + ':</b> ' + escapeHtml(ch.name) + (squadLabel ? ' <span class="text-muted">(' + squadLabel + ')</span>' : '');
+    });
 
-    Swal.fire({ title: 'Support Champions!', html: message, icon: 'success', confirmButtonText: 'Cool!' });
+    Swal.fire({ title: 'Support Champions!', html: resultParts.join('<br>'), icon: 'success', confirmButtonText: 'Cool!' });
     unloadSpinner();
 }
 
@@ -343,6 +495,8 @@ function setActiveContext(context, buttonId) {
         var active = document.getElementById(buttonId);
         if (active) active.classList.add('active-context');
     }
+    var manualPanel = document.getElementById('manualChampPanel');
+    if (manualPanel) manualPanel.style.display = (context === 'support') ? '' : 'none';
 }
 
 function btnAll_Click() {
@@ -361,20 +515,16 @@ function btnAll_Click() {
 
 function btnSupportChampion_Click() {
     setActiveContext('support', 'btnSupportChampion');
-    var history = loadHistory();
-    var alphaHistory = history.supportAlpha || [];
-    var betaHistory  = history.supportBeta  || [];
+    populateManualChampSelects();
+    _ensureSupportQueues();
+    var skip = loadHistory().supportSkip || [];
     let buttons = getAllButtons();
     buttons.forEach((item) => {
-        var role = $(item).prop("role");
-        if (role.toLowerCase() === "dev") {
-            var team = $(item).prop("team");
-            var picked = (team && team.toLowerCase() === 'alpha') ? alphaHistory : betaHistory;
-            if (picked.indexOf($(item).text()) === -1) {
-                enabledButton(item);
-            } else {
-                disabledButton(item);
-            }
+        var r = ($(item).prop("role") || '').toLowerCase();
+        var t = ($(item).prop("team") || '').toLowerCase();
+        if ((r === "dev" || r === "pm") && (t === 'alpha' || t === 'beta')) {
+            if (skip.indexOf($(item).text()) === -1) enabledButton(item);
+            else disabledButton(item);
         } else {
             disabledButton(item);
         }
@@ -457,7 +607,24 @@ function btnFacilitatorButtonClick() {
     else {
         enabledButton(this);
     }
+    if (currentContext === 'support') _syncSupportSkipFromButtons();
     updateHistoryDisplay();
+}
+
+// Persist the set of eligible members the user has deselected (skipped) in Support
+// context so the exclusion survives view refreshes and future picks.
+function _syncSupportSkipFromButtons() {
+    var skip = [];
+    getAllButtons().forEach(function (item) {
+        var r = ($(item).prop('role') || '').toLowerCase();
+        var t = ($(item).prop('team') || '').toLowerCase();
+        if ((r === 'dev' || r === 'pm') && (t === 'alpha' || t === 'beta') && !$(item).hasClass('btn-primary')) {
+            skip.push($(item).text());
+        }
+    });
+    var h = loadHistory();
+    h.supportSkip = skip;
+    saveHistory(h);
 }
 
 function btnDefineFacilitator_Click() {
