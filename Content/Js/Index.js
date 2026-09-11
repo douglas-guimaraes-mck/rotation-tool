@@ -5,32 +5,114 @@ var currentContext = null; // 'alpha' | 'beta' | 'all' | 'support'
 // History is serialised into the page URL hash so any team member who opens
 // the same link gets the same rotation state — no server or database needed.
 
-function _encodeHistory(history) {
-    var json = JSON.stringify(history);
-    var bytes = new TextEncoder().encode(json);
-    var binary = Array.from(bytes, function (b) { return String.fromCharCode(b); }).join('');
-    return btoa(binary);
+// The hash is kept as short as possible so the share link fits tight limits
+// (e.g. a Slack topic, 250 chars). Instead of base64-encoded JSON we serialise a
+// compact string: people are stored as their roster INDEX (one base36 char),
+// squads are derived from the roster (not stored), and dates are delta-encoded.
+// Format:  #d=<alpha>~<beta>~<all>~<queuePrimary>~<queueSecondary>~<skip>~<rounds>
+// where each of the first six is a run of index chars, and <rounds> is
+// dot-separated tokens "<deltaDaysBase36><primaryChar><secondaryChar>" ('_' = none).
+var _HIST_EPOCH = Date.UTC(2020, 0, 1);
+
+function _defaultHistory() {
+    return { alpha: [], beta: [], all: [], supportQueuePrimary: [], supportQueueSecondary: [], supportSkip: [], supportRounds: [] };
 }
 
-function _decodeHistory(encoded) {
+function _rosterNames() {
+    var a = [];
+    getAllButtons().forEach(function (b) { a.push($(b).text()); });
+    return a;
+}
+
+function _daysToIso(days) {
+    var dt = new Date(_HIST_EPOCH + days * 86400000);
+    return dt.getUTCFullYear() + '-'
+        + String(dt.getUTCMonth() + 1).padStart(2, '0') + '-'
+        + String(dt.getUTCDate()).padStart(2, '0');
+}
+function _isoToDays(iso) {
+    var p = String(iso || '').split('-');
+    if (p.length !== 3) return 0;
+    return Math.round((Date.UTC(+p[0], +p[1] - 1, +p[2]) - _HIST_EPOCH) / 86400000);
+}
+
+function _encodeHistory(history) {
+    var names = _rosterNames();
+    var idx = {};
+    names.forEach(function (n, i) { idx[n] = i; });
+    var ix = function (arr) {
+        return (arr || []).map(function (n) { return idx[n] != null ? idx[n].toString(36) : ''; }).join('');
+    };
+    var ch = function (name) { return (name != null && idx[name] != null) ? idx[name].toString(36) : '_'; };
+    var prev = null;
+    var rounds = (history.supportRounds || []).map(function (rd) {
+        var day = _isoToDays(rd.date);
+        var delta = prev == null ? day : (day - prev);
+        prev = day;
+        return delta.toString(36) + ch(rd.primary && rd.primary.name) + ch(rd.secondary && rd.secondary.name);
+    }).join('.');
+    return [ix(history.alpha), ix(history.beta), ix(history.all),
+            ix(history.supportQueuePrimary), ix(history.supportQueueSecondary),
+            ix(history.supportSkip), rounds].join('~');
+}
+
+function _decodeHistoryCompact(str) {
+    var names = _rosterNames();
+    var parts = String(str).split('~');
+    var toNames = function (s) {
+        var out = [];
+        for (var i = 0; i < (s || '').length; i++) {
+            var k = parseInt(s[i], 36);
+            if (!isNaN(k) && names[k] != null) out.push(names[k]);
+        }
+        return out;
+    };
+    var person = function (chr) {
+        if (chr === '_' ) return null;
+        var k = parseInt(chr, 36);
+        var name = (!isNaN(k) && names[k] != null) ? names[k] : null;
+        return name ? { name: name, squad: _supportSquadOf(name) } : null;
+    };
+    var rounds = [];
+    var roundsStr = parts[6] || '';
+    if (roundsStr) {
+        var cum = null;
+        roundsStr.split('.').forEach(function (tok) {
+            if (!tok) return;
+            var s = tok.charAt(tok.length - 1);
+            var p = tok.charAt(tok.length - 2);
+            var delta = parseInt(tok.slice(0, tok.length - 2) || '0', 36);
+            if (isNaN(delta)) delta = 0;
+            cum = cum == null ? delta : cum + delta;
+            rounds.push({ date: _daysToIso(cum), primary: person(p), secondary: person(s) });
+        });
+    }
+    var h = _defaultHistory();
+    h.alpha = toNames(parts[0]); h.beta = toNames(parts[1]); h.all = toNames(parts[2]);
+    h.supportQueuePrimary = toNames(parts[3]); h.supportQueueSecondary = toNames(parts[4]);
+    h.supportSkip = toNames(parts[5]); h.supportRounds = rounds;
+    return h;
+}
+
+// Legacy reader: old links stored base64-encoded JSON under #data=.
+function _decodeHistoryLegacy(encoded) {
     var binary = atob(encoded);
     var bytes = Uint8Array.from(binary, function (c) { return c.charCodeAt(0); });
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return Object.assign(_defaultHistory(), JSON.parse(new TextDecoder().decode(bytes)));
 }
 
 function loadHistory() {
     try {
         var hash = window.location.hash;
-        if (hash && hash.startsWith('#data=')) {
-            return _decodeHistory(hash.slice(6));
-        }
+        if (hash && hash.indexOf('#d=') === 0) return _decodeHistoryCompact(hash.slice(3));
+        if (hash && hash.indexOf('#data=') === 0) return _decodeHistoryLegacy(hash.slice(6));
     } catch (e) { /* corrupt hash — start fresh */ }
-    return { alpha: [], beta: [], all: [], supportQueuePrimary: [], supportQueueSecondary: [], supportSkip: [], supportRounds: [] };
+    return _defaultHistory();
 }
 
 function saveHistory(history) {
     var scrollY = window.scrollY;
-    window.location.hash = 'data=' + _encodeHistory(history);
+    window.location.hash = 'd=' + _encodeHistory(history);
     window.scrollTo(0, scrollY);
 }
 
@@ -395,6 +477,8 @@ function getSupportChampions() {
     latest.supportQueueSecondary = qs;
     latest.supportRounds = latest.supportRounds || [];
     latest.supportRounds.push({ date: dateStr, primary: roundPrimary, secondary: roundSecondary });
+    var MAX_ROUNDS = 30; // keep the share link short enough for a Slack topic (<=250 chars)
+    if (latest.supportRounds.length > MAX_ROUNDS) latest.supportRounds = latest.supportRounds.slice(-MAX_ROUNDS);
     saveHistory(latest);
 
     // Reset the manual dropdowns back to Auto for the next rotation.
